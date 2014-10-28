@@ -38,28 +38,21 @@ int connect_(char *host, int portnum)
 	struct hostent *hp;
 	
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-	{
 		fatal("socket");
-	}
 
 	bzero(&servadd, sizeof(servadd));
 
 	if ((hp = gethostbyname(host)) == NULL)
-	{
 		fatal("gethostbyname");
-	}
 	
 	servadd.sin_port = htons(portnum);
 	servadd.sin_family = AF_INET;
 	bcopy(hp->h_addr, (struct sockaddr *)&servadd.sin_addr, hp->h_length);
 
 	int cr = connect(sock, (struct sockaddr *)&servadd, sizeof(servadd));
-	if (cr != 0)
-	{
+	if (cr != 0) {
 		if(errno != ECONNREFUSED)
-		{
 			fatal("connect");
-		}
 		cls++; 
 		cr = cls;
 	}

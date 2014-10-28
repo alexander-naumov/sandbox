@@ -52,7 +52,7 @@ int scan(char *argv)
 	if(rvn == 1)
 		printf("\n");
 	else
-		printf(" port's is closed\n\n");
+		printf(" ports are closed\n\n");
 
 }
 
@@ -60,12 +60,9 @@ int parse_file(char *name)
 {
 	FILE *f=fopen(name,"r");
 	char buf[128];
-	if(f!=0)
-	{
+	if(f!=0) {
 		while(fgets(buf,128,f)!=0)
-		{
 			scan(buf);
-		}
 		fclose(f);
 	}
 	else
@@ -81,10 +78,8 @@ int main(int argc, char *argv[])
 	char *command;
 	opterr=0;
 	
-	while((c=getopt(argc,argv,"h:f:p:"))!=-1)
-	{
-		switch(c)
-		{
+	while((c=getopt(argc,argv,"h:f:p:"))!=-1) {
+		switch(c) {
 			//h-host = host:port, host:port-port
 			case 'h':   	command=optarg;
 					r=1;

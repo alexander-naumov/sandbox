@@ -18,7 +18,7 @@ int begin_port = 1;
 int end_port = 3000;
 int rvn = 0;
 
-int get_num(char **ps)
+int get_num(char **ps) 
 {
 	int x = 0;
 	char *s = *ps;
@@ -28,7 +28,7 @@ int get_num(char **ps)
 		x *= 10;
 		x += *s - '0';
 		s++;
-	}while(*s >= '0' && *s <= '9');
+	} while(*s >= '0' && *s <= '9');
 	*ps = s;
 	return x;
 }
@@ -44,30 +44,25 @@ void run_error()
 
 int cmd(char *buf)
 {
-	if (strlen(buf) >= IP_LENGTH-1)
-	{
+	if (strlen(buf) >= IP_LENGTH-1) {
 		fprintf(stderr, "It is a very long address: %s\n", buf);
 		return 1;
 	}
 	strcpy(IP, buf);	
 	char *p = strrchr(IP, ':');
-	if(p)
-	{
+	if (p) {
 		*p = '\0';
 		p++;
 		begin_port = get_num(&p);
-		if(begin_port >= 0 && *p == '-')
-		{
+		if(begin_port >= 0 && *p == '-') {
 			p++;
 			end_port = get_num(&p);
 		}
-		else
-		{
+		else {
 			end_port = begin_port;
 			rvn = 1;
 		}
-		if(begin_port < 0 || end_port < 0)
-		{
+		if(begin_port < 0 || end_port < 0) {
 			fprintf(stderr, "Invalid port number \"%s\"\n", p);
 			return 1;
 		}
