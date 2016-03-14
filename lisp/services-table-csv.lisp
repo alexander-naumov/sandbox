@@ -1,13 +1,21 @@
 #!/usr/bin/sbcl --script
 
-(setq *print-pretty* 'nil)
+; Alexander Naumov <alexander_naumov@opensuse.org> 2015, 2016
+;
+; This CGI script generates service table. It's possible to generate
+; table for concrete customer or table with all services.
+; Data comes from the centreon DB.
+
+(setq *print-pretty* 'nil) ;to get long (more than 80 characters) lines (needed by CSV)
 
 (if (sb-ext:posix-getenv "QUERY_STRING")
-	(setq customer (subseq (string (sb-ext:posix-getenv "QUERY_STRING")) 5))
+	(setq customer
+		(if (equal (subseq (string (sb-ext:posix-getenv "QUERY_STRING")) 5) "LEG")
+			'LEGE
+			(subseq (string (sb-ext:posix-getenv "QUERY_STRING")) 5)))
 	(setq customer "ALL"))
-;(setq customer (sb-ext:posix-getenv "QUERY_STRING"))
-(setq VERSION "0.5cgi")
 
+(setq VERSION "0.8cgi")
 
 (let ((quicklisp-init (merge-pathnames "/home/alex/quicklisp/setup.lisp" (user-homedir-pathname))))
   (when (probe-file quicklisp-init)
@@ -22,17 +30,15 @@
 
 (defun sql ()
     (cl-mysql:connect
-		:host     "10.52.1.6"
-		:database "centreon"
-		:user     "ro_user"
-		:password "FLQPFKcy7qC4YxFL")
+		:host     ""
+		:database ""
+		:user     ""
+		:password "")
 
-    (if (equal common-lisp-user::customer "ALL")
-        (setq list_s (car (car (cl-mysql:query "SELECT service_id, service_description, service_comment, command_command_id_arg, service_activate FROM service"))))
-        (setq list_s (car (car (cl-mysql:query
-            (format nil "SELECT service_id, service_description, service_comment, command_command_id_arg, service_activate FROM service WHERE service_description REGEXP \"~A-\"" common-lisp-user::customer))))))
+	(setq list_s (car (car (cl-mysql:query "SELECT service_id, service_description, service_comment, command_command_id_arg, service_activate,
+		service_template_model_stm_id, service_normal_check_interval, service_retry_check_interval, service_max_check_attempts FROM service"))))
 
-    (setq list_h (car (car (cl-mysql:query "SELECT host_id, host_name, host_alias, host_address, host_activate FROM host ORDER BY host_name"))))
+	(setq list_h (car (car (cl-mysql:query "SELECT host_id, host_name, host_alias, host_address, host_activate FROM host ORDER BY host_name"))))
     (setq list_g (car (car (cl-mysql:query "SELECT cg_id, cg_name from contactgroup"))))
     (setq list_p (car (car (cl-mysql:query "SELECT id, name, ns_ip_address from nagios_server"))))
     (setq list_c (car (car (cl-mysql:query "SELECT contact_id, contact_name FROM contact"))))
@@ -56,6 +62,12 @@
           (setf a (list (gethash (nth 0 i) hash-relation))))
         (setf (gethash (nth 0 i) hash-relation) (append a (list (nth 1 i)))))
     (setf (gethash (nth 0 i) hash-relation) (nth 1 i)))))
+
+
+(defun scheduling-req (x)
+	(if (and (nth 1 x) (nth 2 x) (nth 3 x))
+		(format nil "~A min / ~A min  (~A times)" (nth 1 x) (nth 2 x) (nth 3 x))
+		(scheduling-req (gethash (car x) hash-relation-s-st))))
 
 
 (defun data ()
@@ -85,6 +97,11 @@
     (dolist (i list_p)
         (setf (gethash (car i) hash-poller) (cdr i)))
 
+    ; service - scheduling
+    (setf hash-relation-s-st (make-hash-table))
+	(dolist (i list_s)
+		(setf (gethash (car i) hash-relation-s-st) (list (nth 5 i) (nth 6 i) (nth 7 i) (nth 8 i))))
+
     ; service - contacts
     (setf hash-relation-s-c (make-hash-table))
     (contact-hash-relation hash-relation-s-c relation_s_c)
@@ -101,7 +118,7 @@
 	(cdr msg))
 
 
-(defun make-str (i)
+(defun make-str-service (i)
 	(let(
 	(s-id		(nth 0 i))
 	(s-name 	(nth 1 i))
@@ -132,26 +149,56 @@
 					(nth 0 (gethash (gethash (car i) hash-relation-s-g) hash-group))
 					'|< NO ALERTING >|))))
 
+	(s-schedul  (scheduling-req (list (nth 5 i) (nth 6 i) (nth 7 i) (nth 8 i))))
 	(p-name     (nth 0 (gethash (gethash (gethash (car i) hash-relation-s-h) hash-relation-h-p) hash-poller)))
 	(p-ip       (nth 1 (gethash (gethash (gethash (car i) hash-relation-s-h) hash-relation-h-p) hash-poller)))
 	(s-values   (nth 3 i)))
-	;(comments   (nth 2 i)))
 
-	(return-from make-str
-		(list s-id s-name h-name h-alias h-ip h-activate s-activate contacts contact-group p-name p-ip s-values))))
-			
+	(return-from make-str-service
+		(list s-id s-name h-name h-alias h-ip h-activate s-activate s-schedul contacts contact-group p-name p-ip s-values))))
+
+(defun make-str-host (i)
+	(let(
+	(h-name		(nth 1 i))
+	(h-alias	(nth 2 i))
+	(h-ip		(nth 3 i))
+	(h-activate (state (parse-integer (nth 4 i)))))
+	;(contacts 6)
+	;(contact-group 8)
+	;(p-name 7)
+	;(p-ip 9)
+	;(format t "~A ~A ~A ~A" h-name h-alias h-ip h-activate)
+	(return-from make-str-host
+		(list '--- '--- h-name h-alias h-ip h-activate '--- '--- '--- '---- '--- '---))))
+
 (defun make-table (&optional file)
 	(setf L (list '()))
-	(dolist (i list_s)
-		(nconc L (list (make-str i))))
+
+;	(dolist (i list_s)
+;		(if (string-equal common-lisp-user::customer (nth 2 (make-str-host i)) :start1 0 :end1 2 :start2 0 :end2 2)
+;			(nconc L (list (make-str-service i)))))
+
+	(if (string-equal common-lisp-user::customer "ALL")
+		(progn
+			(dolist (i list_h)
+				(nconc L (list (make-str-host i))))
+			(dolist (i list_s)
+				(nconc L (list (make-str-service i)))))
+		(progn
+			(dolist (i list_h)									; FIXME: we call (make-str-host i) 2 times
+				(if (string-equal common-lisp-user::customer (nth 2 (make-str-host i)) :start1 0 :end1 2 :start2 0 :end2 2)
+					(nconc L (list (make-str-host i)))))
+			(dolist (i list_s)
+				(if (string-equal common-lisp-user::customer (nth 2 (make-str-service i)) :start1 0 :end1 2 :start2 0 :end2 2)
+					(nconc L (list (make-str-service i)))))))
 
 	(setf L (sort (cdr L) #'string< :key #'third))
-	(push '("SERVICE ID#SERVICE NAME#HOST NAME#HOST ALIAS#IP ADDRESS#HOST ACTIVATE#SERVICE ACTIVATE#CONTACTS#CONTACT GROUPS#POLLER NAME#POLLER IP#SERVICE VALUES#COMMENTS") L)
+	(push '("SERVICE ID#SERVICE NAME#HOST NAME#HOST ALIAS#IP ADDRESS#HOST ACTIVATE#SERVICE ACTIVATE#SCHEDULING#CONTACTS#CONTACT GROUPS#POLLER NAME#POLLER IP#SERVICE VALUES") L)
 
 	(format t "Content-Type: application/vnd.ms-excel~%")
 	(format t "Content-Disposition: attachment; filename=~A~%~%" file)
-    (dolist (i L)
-        (dolist (row i)
+	(dolist (i L)
+		(dolist (row i)
 			(if (consp row)
                 (progn
                     (dolist (r row)
@@ -159,10 +206,6 @@
                     (format t "#"))
                 (format t "~A#" row)))
         (format t "~%")))
-	;(format t "~A~%" (length list_s))
-
-	;(dolist (i L)
-	;	(format t "~A~%" i)))
 
 (sql)
 (data)
