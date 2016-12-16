@@ -1,5 +1,7 @@
 #!/usr/bin/sbcl --script
 
+; Copyright (C) 2016 Alexander Naumov
+
 (declaim (sb-ext:muffle-conditions cl:warning))
 
 (let ((quicklisp-init (merge-pathnames "/home/alex/quicklisp/setup.lisp" (user-homedir-pathname))))
