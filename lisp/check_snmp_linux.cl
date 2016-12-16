@@ -1,6 +1,5 @@
 #!/usr/bin/sbcl --script
 
-; Copyright (C) 2016 Alexander Naumov
 
 (declaim (sb-ext:muffle-conditions cl:warning))
 
